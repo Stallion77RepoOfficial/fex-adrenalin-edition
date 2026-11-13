@@ -37,6 +37,13 @@ bool TryEnableHardwareTSO();
  */
 bool SetKernelUnalignedAtomicControl(uint64_t Flags);
 
+/**
+ * @brief Enters (false) or leaves (true) a section that writes MAP_JIT memory on the calling thread.
+ *
+ * @return false if the host has no such switch.
+ */
+bool SetJITWriteProtect(bool Enable);
+
 void VirtualTHPControl(const void* Ptr, size_t Size, FEXCore::Allocator::THPControl Control);
 void VirtualName(const char* Name, const void* Ptr, size_t Size);
 

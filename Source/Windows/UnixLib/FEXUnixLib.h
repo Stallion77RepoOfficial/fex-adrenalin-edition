@@ -12,6 +12,7 @@ enum class FEXUnixLibFunctions : uint32_t {
   DeleteSHMStatsFile,
   MapFile,
   GetPID,
+  SetJITWriteProtect,
   MAX,
 };
 
@@ -65,3 +66,10 @@ struct FEXUnixLib_GetPID {
   uint32_t Result;
 };
 static_assert(sizeof(FEXUnixLib_GetPID) == 4);
+
+// Apple silicon: MAP_JIT memory is either writable or executable for a thread.
+// Enable = false enters a write section, true leaves it; sections nest.
+struct FEXUnixLib_SetJITWriteProtect {
+  bool Enable;
+};
+static_assert(sizeof(FEXUnixLib_SetJITWriteProtect) == 1);

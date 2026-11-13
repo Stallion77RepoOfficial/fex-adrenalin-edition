@@ -416,6 +416,8 @@ static void HandleErrata(FEXCore::HostFeatures* HostFeatures, uint64_t MIDR) {
 
   constexpr uint32_t Implementer_Ampere = 0xc0;
 
+  constexpr uint32_t Implementer_Apple = 0x61;
+
   auto GetMIDRImplementer = [](uint32_t MIDR) -> uint32_t {
     return (MIDR >> 24) & 0xFF;
   };
@@ -439,6 +441,13 @@ static void HandleErrata(FEXCore::HostFeatures* HostFeatures, uint64_t MIDR) {
     HostFeatures->SupportsRAND = false;
   }
 #endif
+
+  if (MIDR_Implementer == Implementer_Apple) {
+    // Writing FPCR serializes and is slow on Apple cores. With AFP, FPCR gets switched on every transition
+    // between emulated and native code, which made callback-heavy ARM64EC code (qsort calling an emulated
+    // comparator) three times slower than without it.
+    HostFeatures->SupportsAFP = false;
+  }
 
   // The LDAPUR instruction suffers from significant performance issues on many ARM implementations. This is
   // listed in the official Cortex errata list as follows:

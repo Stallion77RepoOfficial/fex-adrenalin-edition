@@ -8,6 +8,7 @@
 #include "Utils/MemberFunctionToPointer.h"
 
 #include <FEXCore/Config/Config.h>
+#include <FEXCore/Utils/AllocatorHooks.h>
 #include <FEXCore/Core/CoreState.h>
 #include <FEXCore/Core/SignalDelegator.h>
 #include <FEXCore/Core/X86Enums.h>
@@ -52,6 +53,7 @@ Dispatcher::~Dispatcher() {
 }
 
 void Dispatcher::EmitDispatcher() {
+  FEXCore::Allocator::ScopedJITWrite JITWrite;
   // Don't modify TMP3 since it contains our RIP once the block doesn't exist
   auto RipReg = TMP3;
 #ifdef VIXL_DISASSEMBLER

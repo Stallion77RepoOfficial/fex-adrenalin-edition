@@ -4,7 +4,15 @@
 #include <fcntl.h>
 #include <string>
 #include <sys/mman.h>
+#ifdef __APPLE__
+#include <cerrno>
+#include <cstdarg>
+#include <mach/mach.h>
+#include <mach/mach_traps.h>
+#include <pthread.h>
+#else
 #include <sys/prctl.h>
+#endif
 #include <unistd.h>
 
 #include "FEXUnixLib.h"
@@ -43,6 +51,26 @@ constexpr NTSTATUS STATUS_INTERNAL_ERROR = 0xC00000E5;
 #endif
 #ifndef PR_SET_VMA_ANON_NAME
 #define PR_SET_VMA_ANON_NAME 0
+#endif
+
+#ifdef __APPLE__
+// macOS has no prctl. The x86 memory model is a per-thread switch there
+// (thread_set_x86_64_compat, needs the cross-architecture entitlement) with no
+// query; nothing else has an equivalent.
+static int prctl(int Option, ...) {
+  if (Option == PR_GET_MEM_MODEL) {
+    return PR_SET_MEM_MODEL_DEFAULT;
+  }
+  if (Option == PR_SET_MEM_MODEL) {
+    va_list Args;
+    va_start(Args, Option);
+    int Model = va_arg(Args, int);
+    va_end(Args);
+    return thread_set_x86_64_compat(Model == PR_SET_MEM_MODEL_TSO) == KERN_SUCCESS ? 0 : -1;
+  }
+  errno = EINVAL;
+  return -1;
+}
 #endif
 
 static NTSTATUS FEXUnixLib_SetHardwareTSOControlHandler(void* _Args) {
@@ -181,6 +209,24 @@ static NTSTATUS FEXUnixLib_GetPIDHandler(void* _Args) {
   Args->Result = ::getpid();
   return STATUS_SUCCESS;
 }
+static NTSTATUS FEXUnixLib_SetJITWriteProtectHandler(void* _Args) {
+#ifdef __APPLE__
+  // Write sections nest; only the outermost one switches the thread.
+  static thread_local uint32_t Depth;
+  auto Args = reinterpret_cast<const FEXUnixLib_SetJITWriteProtect*>(_Args);
+  if (!Args->Enable) {
+    if (Depth++ == 0) {
+      pthread_jit_write_protect_np(0);
+    }
+  } else if (Depth && --Depth == 0) {
+    pthread_jit_write_protect_np(1);
+  }
+  return STATUS_SUCCESS;
+#else
+  return STATUS_NOT_SUPPORTED;
+#endif
+}
+
 extern "C" const unixlib_entry_t __wine_unix_call_funcs[] = {
   FEXUnixLib_SetHardwareTSOControlHandler,
   FEXUnixLib_SetKernelUnalignedAtomicControlHandler,
@@ -190,6 +236,7 @@ extern "C" const unixlib_entry_t __wine_unix_call_funcs[] = {
   FEXUnixLib_DeleteSHMStatsFileHandler,
   FEXUnixLib_MapFileHandler,
   FEXUnixLib_GetPIDHandler,
+  FEXUnixLib_SetJITWriteProtectHandler,
 };
 
 static_assert(sizeof(__wine_unix_call_funcs) / sizeof(__wine_unix_call_funcs[0]) == ToUnderlying(FEXUnixLibFunctions::MAX));

@@ -9,6 +9,7 @@
 #include <FEXCore/Utils/LogManager.h>
 #include <FEXCore/Utils/Telemetry.h>
 #include <FEXCore/Utils/ArchHelpers/Arm64.h>
+#include <FEXCore/Utils/AllocatorHooks.h>
 
 #include <atomic>
 #include <cstdint>
@@ -2100,6 +2101,8 @@ std::optional<int32_t> HandleUnalignedAccess(FEXCore::Core::InternalThreadState*
     }
   }
 
+  // The spin lock lives in the code buffer too.
+  FEXCore::Allocator::ScopedJITWrite JITWrite;
   // Lock code mutex during any SIGBUS handling that potentially changes code.
   // Due to code buffer sharing between threads, code must be carefully backpatched from last to first.
   // Multiple threads can be attempting to handle the SIGBUS or even be executing the code being backpatched.

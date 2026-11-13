@@ -584,6 +584,7 @@ void BTCpuThreadInit() {
   std::scoped_lock Lock(ThreadCreationMutex);
   FEX::Windows::InitCRTThread();
   auto* Thread = CTX->CreateThread();
+  Context::HandlerConfig->ThreadInit();
 
   // Default segment setup.
   auto Frame = Thread->CurrentFrame;

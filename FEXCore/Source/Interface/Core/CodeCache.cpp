@@ -617,6 +617,7 @@ bool CodeCache::ApplyPackedCodeRelocations(uint64_t GuestEntry, std::span<std::b
 
 bool CodeCache::ApplyCodeRelocations(uint64_t GuestEntry, std::span<std::byte> Code,
                                      std::span<const FEXCore::CPU::Relocation> EntryRelocations, bool ForStorage) {
+  FEXCore::Allocator::ScopedJITWrite JITWrite;
   CPU::Arm64Emitter Emitter(&CTX, Code.data(), Code.size_bytes());
   for (size_t j = 0; j < EntryRelocations.size(); ++j) {
     const FEXCore::CPU::Relocation& Reloc = EntryRelocations[j];
@@ -932,6 +933,7 @@ std::span<std::byte> AbstractCodeCache::SelectCodeRangeToFinalize(MappedCodeCach
 namespace FEXCore::Context {
 
 void CodeCache::FinalizeCodePages(MappedCodeCacheFile& Code, std::span<std::byte> CodeRange) {
+  FEXCore::Allocator::ScopedJITWrite JITWrite;
   const size_t StartOffset = CodeRange.data() - Code.CodeBuffer.data();
   const auto StartPage = StartOffset / Utils::FEX_PAGE_SIZE;
   const auto EndPage = StartPage + CodeRange.size_bytes() / Utils::FEX_PAGE_SIZE;

@@ -58,6 +58,17 @@ inline void* VirtualAlloc(void* Base, size_t Size, bool Execute = false, bool Co
   return ::VirtualAlloc2(nullptr, Base, Size, Flags, Execute ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE, Execute ? &Parameter : nullptr,
                          Execute ? 1 : 0);
 #else
+  if (Execute) {
+    // A host that never makes writable memory executable (Wine on macOS) maps
+    // JIT code apart when it is marked as EC code. Hosts that refuse the
+    // attribute outside ARM64EC get a plain allocation.
+    MEM_EXTENDED_PARAMETER Parameter {};
+    Parameter.Type = MemExtendedParameterAttributeFlags;
+    Parameter.ULong64 = MEM_EXTENDED_PARAMETER_EC_CODE;
+    if (void* Ptr = ::VirtualAlloc2(nullptr, Base, Size, Flags, PAGE_EXECUTE_READWRITE, &Parameter, 1)) {
+      return Ptr;
+    }
+  }
   return ::VirtualAlloc(Base, Size, Flags, Execute ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
 #endif
 }
@@ -103,6 +114,15 @@ inline bool VirtualProtect(void* Ptr, size_t Size, ProtectOptions options) {
 
 FEX_DEFAULT_VISIBILITY extern VirtualNamePtr VirtualName;
 FEX_DEFAULT_VISIBILITY extern VirtualTHPPtr VirtualTHPControl;
+
+// Apple silicon only lets a thread either write or execute MAP_JIT memory, so
+// on such a host every write to JIT code is bracketed with Begin/EndJITWrite
+// (per thread, nestable). Without a hook they do nothing. The hook gets false
+// on entering a write section and true on leaving one, and counts nesting.
+using JITWriteProtectPtr = void (*)(bool Enable);
+FEX_DEFAULT_VISIBILITY void SetJITWriteProtectHook(JITWriteProtectPtr Hook);
+FEX_DEFAULT_VISIBILITY void BeginJITWrite();
+FEX_DEFAULT_VISIBILITY void EndJITWrite();
 #else
 using MMAP_Hook = void* (*)(void*, size_t, int, int, int, off_t);
 using MUNMAP_Hook = int (*)(void*, size_t);
@@ -124,6 +144,8 @@ inline void* VirtualAlloc(void* Base, size_t Size, bool Execute = false, bool Co
 inline void VirtualFree(void* Ptr, size_t Size) {
   FEXCore::Allocator::munmap(Ptr, Size);
 }
+inline void BeginJITWrite() {}
+inline void EndJITWrite() {}
 inline void VirtualDontNeed(void* Ptr, size_t Size, bool Recommit = true) {
   ::madvise(reinterpret_cast<void*>(Ptr), Size, MADV_DONTNEED);
 }
@@ -188,5 +210,16 @@ struct FEXAllocOperators {
   void operator delete(void* ptr, std::align_val_t align) {
     return FEXCore::Allocator::aligned_free(ptr);
   }
+};
+
+struct ScopedJITWrite final {
+  ScopedJITWrite() {
+    BeginJITWrite();
+  }
+  ~ScopedJITWrite() {
+    EndJITWrite();
+  }
+  ScopedJITWrite(const ScopedJITWrite&) = delete;
+  ScopedJITWrite& operator=(const ScopedJITWrite&) = delete;
 };
 } // namespace FEXCore::Allocator

@@ -322,6 +322,26 @@ void VirtualTHPNOP(const void* Ptr, size_t Size, THPControl Control) {}
 VirtualNamePtr VirtualName {VirtualNameNOP};
 VirtualTHPPtr VirtualTHPControl {VirtualTHPNOP};
 
+// The hook keeps the per-thread nesting count: PE TLS may not be set up yet
+// for the emulator DLL when the first code is written.
+static JITWriteProtectPtr JITWriteProtect {};
+
+void SetJITWriteProtectHook(JITWriteProtectPtr Hook) {
+  JITWriteProtect = Hook;
+}
+
+void BeginJITWrite() {
+  if (JITWriteProtect) {
+    JITWriteProtect(false);
+  }
+}
+
+void EndJITWrite() {
+  if (JITWriteProtect) {
+    JITWriteProtect(true);
+  }
+}
+
 void SetupHooks(size_t PageSize, HookPtrs Ptrs) {
   VirtualName = Ptrs.VirtualName;
   VirtualTHPControl = Ptrs.VirtualTHPControl;

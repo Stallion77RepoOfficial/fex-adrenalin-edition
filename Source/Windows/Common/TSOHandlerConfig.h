@@ -19,6 +19,7 @@ public:
 
     if (TSOEnabled() && FEX::Windows::UnixLib::TryEnableHardwareTSO()) {
       CTX.SetHardwareTSOSupport(true);
+      HardwareTSO = true;
     }
 
     uint64_t Flags = (StrictInProcessSplitLocks() ? FEX_UNALIGN_ATOMIC_STRICT_SPLIT_LOCKS : 0) |
@@ -33,7 +34,16 @@ public:
     return UnalignedHandlerType;
   }
 
+  // The host memory model can be a per-thread setting (it is on macOS), so
+  // every new thread switches itself to TSO.
+  void ThreadInit() const {
+    if (HardwareTSO) {
+      FEX::Windows::UnixLib::TryEnableHardwareTSO();
+    }
+  }
+
 private:
+  bool HardwareTSO {};
   FEX_CONFIG_OPT(TSOEnabled, TSOENABLED);
   FEX_CONFIG_OPT(HalfBarrierTSOEnabled, HALFBARRIERTSOENABLED);
   FEX_CONFIG_OPT(StrictInProcessSplitLocks, STRICTINPROCESSSPLITLOCKS);

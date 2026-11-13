@@ -1008,6 +1008,7 @@ void BTCpu64NotifyReadFile(HANDLE Handle, void* Address, SIZE_T Size, BOOL After
 NTSTATUS ThreadInit() {
   std::scoped_lock Lock(ThreadCreationMutex);
   FEX::Windows::InitCRTThread();
+  Exception::HandlerConfig->ThreadInit();
   const auto CPUArea = GetCPUArea();
 
   static constexpr size_t EmulatorStackSize = 0x40000;

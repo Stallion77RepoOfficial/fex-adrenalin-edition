@@ -89,7 +89,22 @@ bool Init(HMODULE NtDll) {
 
   // Give a log saying that the unix lib was loaded.
   LogMan::Msg::IFmt("FEX: Loaded FEXUnixLib");
+
+  // On macOS the JIT code lives in MAP_JIT memory, which a thread has to switch
+  // to writable before emitting code and back before running it.
+  if (SetJITWriteProtect(false) && SetJITWriteProtect(true)) {
+    FEXCore::Allocator::SetJITWriteProtectHook([](bool Enable) { SetJITWriteProtect(Enable); });
+    LogMan::Msg::IFmt("FEX: JIT memory needs write/execute switching");
+  }
   return true;
+}
+
+bool SetJITWriteProtect(bool Enable) {
+  FEXUnixLib_SetJITWriteProtect Args {
+    .Enable = Enable,
+  };
+
+  return Call(FEXUnixLibFunctions::SetJITWriteProtect, &Args) == STATUS_SUCCESS;
 }
 
 bool Available() {
