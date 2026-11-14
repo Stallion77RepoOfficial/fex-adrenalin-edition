@@ -61,9 +61,14 @@ void InvalidationTracker::HandleMemoryProtectionNotification(uint64_t Address, u
       if (EffectiveRWX) {
         LogMan::Msg::DFmt("Add SMC interval: {:X} - {:X}", AlignedBase, AlignedBase + AlignedSize);
         RWXIntervals.Insert(ProtInterval);
+      } else {
+        RWXIntervals.Remove(ProtInterval);
       }
       if (DEPDisabled && !HasExec) {
         DEPPromotedIntervals.Insert(ProtInterval);
+      } else {
+        // Explicitly executable pages must survive re-enabling DEP.
+        DEPPromotedIntervals.Remove(ProtInterval);
       }
       return true;
     } else if (XIntervals.Intersect(ProtInterval)) {
@@ -144,10 +149,13 @@ void InvalidationTracker::HandleImageMap(std::string_view Name, uint64_t Address
       uint64_t SectionBase = Address + Section->VirtualAddress;
       uint64_t SectionEnd = SectionBase + Section->Misc.VirtualSize;
       XIntervals.Insert({SectionBase, SectionEnd});
+      DEPPromotedIntervals.Remove({SectionBase, SectionEnd});
       LastExecutableSectionEnd = std::max(LastExecutableSectionEnd, SectionEnd);
       if (Section->Characteristics & IMAGE_SCN_MEM_WRITE) {
         LogMan::Msg::DFmt("Add image SMC interval: {:X} - {:X}", SectionBase, SectionBase + Section->Misc.VirtualSize);
         RWXIntervals.Insert({SectionBase, SectionBase + Section->Misc.VirtualSize});
+      } else {
+        RWXIntervals.Remove({SectionBase, SectionEnd});
       }
     }
   }
@@ -189,6 +197,7 @@ InvalidationTracker::InvalidateContainingSectionResult InvalidationTracker::Inva
     std::unique_lock Lock(IntervalsLock);
     XIntervals.Remove({SectionBase, SectionBase + SectionSize});
     RWXIntervals.Remove({SectionBase, SectionBase + SectionSize});
+    DEPPromotedIntervals.Remove({SectionBase, SectionBase + SectionSize});
   }
 
   return {SectionBase, SectionSize};
@@ -209,6 +218,7 @@ void InvalidationTracker::InvalidateAlignedInterval(uint64_t Address, uint64_t S
     std::unique_lock Lock(IntervalsLock);
     XIntervals.Remove({AlignedBase, AlignedBase + AlignedSize});
     RWXIntervals.Remove({AlignedBase, AlignedBase + AlignedSize});
+    DEPPromotedIntervals.Remove({AlignedBase, AlignedBase + AlignedSize});
   }
 }
 
